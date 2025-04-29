@@ -137,7 +137,7 @@ plot(rocTrainOmicsA,
 
 
 
-#临床变量合并影像组学（RS值）123
+#临床变量合并影像组学（RS值）
 dataClinic<-read.xlsx("C:/Users/txh/Desktop/3.xlsx")
 dataClinic<-as.data.frame(dataClinic)
 print(paste('总样本数:',nrow(dataClinic),ncol(dataClinic)))
@@ -152,7 +152,7 @@ print(paste('验证集数:',nrow(testClicnic),ncol(testClicnic)))
 write.xlsx(trainClicnic,"C:/Users/txh/Desktop/05data/trainClinic.xlsx",rowNames = FALSE )
 write.xlsx(testClicnic,"C:/Users/txh/Desktop/05data/testClinic.xlsx",rowNames = FALSE )
 
-#机器学习分析
+#机器学习分析 ML analysis 
 library(randomForest) 
 library(e1071) 
 library(caret)
