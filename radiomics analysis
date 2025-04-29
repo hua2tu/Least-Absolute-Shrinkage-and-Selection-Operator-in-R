@@ -1,0 +1,101 @@
+#完整影像组学分析
+rm(list=ls())
+library(glmnet)   #进行lasso回归分析
+library(rms)
+library(openxlsx)    #使用R读取excel文件
+library(Hmisc)
+library(nortest)    #正态性分布
+library(car)    #回归分析，lm()
+library(agricolae)    #提供方差分析&组间多重比较、Kruskal-Wallis检验
+library(pROC)    #进行roc分析
+library(mRMRe)   #进行最小冗余最大相关性分析（筛选影像组学变量）
+library(ggplot2)  #绘制roc曲线
+
+
+radiomics <-read.xlsx("C:/Users/txh/Desktop/data/totaldata.xlsx",sheet = 1)
+radiomics<-as.data.frame(radiomics)
+#radiomics[] <- lapply(radiomics, function(x) as.numeric(x))   将表中以科学计数法的数值转变为数字型
+print(paste('总样本数:',nrow(radiomics),ncol(radiomics)))
+sum(is.na(radiomics))  # 输出缺失值个数
+#colSums(is.na(radiomics))      #查看每列缺失值数量
+#str(radiomics)
+
+
+# 将数据转换为 mRMRe.Data 类型
+#第一列是label，ncol(radiomics)为列数，即2:ncol(radiomics)为第2列到最后一列
+radiomicsData<-radiomics[,c(2:ncol(radiomics))]
+mrmr_data <- mRMR.data(data = data.frame(radiomicsData))
+# 设置目标变量
+target_index <- which(names(radiomicsData) == "label")
+mrmr<-mRMR.ensemble(data = mrmr_data, target_indices =target_index,
+                     feature_count = 30, solution_count = 1)
+
+#绘制筛选出的变量及其排名柱状图
+#Rank应该与feature_count数值保持一致，Feature为提取特征名，Score为提取特征值
+selected_features <- data.frame(
+    Rank = 30:1,
+    Feature = feature_names[c(mrmr@filters[[1]])], 
+    Score = mrmr@scores[[1]]
+)
+print(selected_features)
+#绘制柱状图
+ggplot(selected_features, aes(y = reorder(Feature, Score), x = Score)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs( x = "Importance Score", y = "Feature") +
+  geom_text(aes(label = round(Score,5), hjust = ifelse(Score > 0, -0.1, 1.1)), color = "black", size = 4)
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+#再用lasso回归进一步筛选特征
+"""   这两句等同于下面两句
+feature_names <- featureNames(mrmr)
+feature <- radiomicsData[,feature_names]
+"""
+index<-mrmr@filters[[1]]
+lassoData <- radiomicsData[,index]
+lassoData$label <-radiomicsData$label
+dim(lassoData)
+y <- factor(lassoData$label)  
+#除去因变量，提取自变量
+yavars<-names(lassoData) %in% c("label")
+X <- as.data.frame(lassoData[!yavars])
+X <- model.matrix(~.,data=X)[,-1]      #[,-1]是为了去掉截距
+#Lasso回归
+fit <- glmnet(X,y,alpha=1, family = "binomial")     #nlambda=100  可以选择lambda数量
+plot(fit, xvar="lambda", label=TRUE)    #LASSO系数路径图"""
+set.seed(1234)  # 固定随机种子
+cv.fit <- cv.glmnet(X,y,alpha=1,nfolds = 10,family="binomial")
+plot(cv.fit)     #LASSO正则化路径图（确定特征数量）
+abline(v=log(c(cv.fit$lambda.min, cv.fit$lambda.1se)), lty=2)
+plot(cv.fit$glmnet.fit,xvar="lambda")
+abline(v=log(cv.fit$lambda.min), lty=2) #把lambda取最小值时对应的虚线绘制到LASSO图中
+#截断值intercept=T或intercept=F对lasso图中的列线对应的变量数存在差异
+best_model <- glmnet(X, y, alpha = 1,  family = "binomial",lambda = cv.fit$lambda.min,intercept = T)
+coef(best_model)
+#计算Radiomics Score
+lassoData$RST <-predict(best_model,type="link",newx=X,newy=y)
+lassoData$RST<-as.numeric(lassoData$RST1)
+write.xlsx(lassoData,"C:/Users/txh/Desktop/LassoData.xlsx",rowNames = FALSE )
+
+
+#再获取的影像组学得分的基础上联合临床信息建立预测模型（prob为预测概率（连续性变量），pred为预测类别（分类变量））
+Mergedata<-read.xlsx("C:/Users/txh/Desktop/mergedata.xlsx")
+Mergedata$label<-as.factor(Mergedata$label)
+model.Mergedata <- glm(label ~ BMI+高血压+RST,data=Mergedata,binomial(link='logit'))
+prob<-predict.glm(object =model.Mergedata,newdata=Mergedata,type = "response")
+pred<-ifelse(prob>=0.5,2,1)
+xtab <- table(pred, Mergedata$label)   #两个变量必须为分类变量
+confusionMatrix(xtab)
+rocLR <- roc(Mergedata$label, prob,levels=c("1","2"),ci=T,auc=T) 
+rocLR      #AUC及其95%CI
+#绘制ROC曲线
+plot(rocLR, print.auc=TRUE, print.auc.x=0.5, print.auc.y=0.5,main="ROC Curves", col="red",lty=1,legacy.axes=TRUE)  
+#绘制校准曲线
+Mergedata$prob<-prob
+log_model <- lrm(label ~ pred, data = Mergedata,x=TRUE,y=TRUE)  
+calLR <- calibrate(log_model, method = "boot", B = 100)  # 使用bootstrap进行校准  
+plot(calLR,main="Calibration plot (LR model)")
+#绘制决策曲线
+#绘制决策曲线时因变量必须为0，1的二分类变量，下一行代码是将1，2分类变量转换为0，1分类变量
+Mergedata$label <- ifelse(Mergedata$label == 2, 1, 0)   
+decLR<- decision_curve(label ~ prob, data = Mergedata)  
+plot_decision_curve(decLR,curve.names=c('LR Model'),cost.benefit.axis =FALSE,col= c('red'),confidence.intervals=FALSE,standardize = FALSE)
