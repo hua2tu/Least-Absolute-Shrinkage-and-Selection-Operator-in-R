@@ -137,7 +137,7 @@ plot(rocTrainOmicsA,
 
 
 
-#临床变量合并影像组学（RS值）
+#临床变量合并影像组学（RS值）大撒大撒那家的
 dataClinic<-read.xlsx("C:/Users/txh/Desktop/3.xlsx")
 dataClinic<-as.data.frame(dataClinic)
 print(paste('总样本数:',nrow(dataClinic),ncol(dataClinic)))
