@@ -46,10 +46,7 @@ ggplot(selected_features, aes(y = reorder(Feature, Score), x = Score)) +
   theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
 
 #再用lasso回归进一步筛选特征
-"""   这两句等同于下面两句
-feature_names <- featureNames(mrmr)
-feature <- radiomicsData[,feature_names]
-"""
+#这两句等同于下面两句feature_names <- featureNames(mrmr)feature <- radiomicsData[,feature_names]
 index<-mrmr@filters[[1]]
 lassoData <- radiomicsData[,index]
 lassoData$label <-radiomicsData$label
