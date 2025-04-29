@@ -1,0 +1,691 @@
+#第五次影像学分析
+rm(list=ls())
+library(glmnet)
+library(rms)
+library(foreign)
+library(ggplot2)
+library(pROC)
+library(openxlsx) 
+
+#分割影像数据为train&test数据集
+dataOmics<-read.xlsx("C:/Users/txh/Desktop/05data/Omics.xlsx")
+set.seed(888)
+nn<-0.7
+print(paste('总样本数:',nrow(dataOmics),ncol(dataOmics)))
+sub<-sample(1:nrow(dataOmics),round(nrow(dataOmics)*nn))
+trainOmics<-dataOmics[sub,]#取0.7的数据做训练集
+testOmics<-dataOmics[-sub,]#取0.3的数据做测试集
+print(paste('训练集数:',nrow(trainOmics),ncol(trainOmics)))
+print(paste('验证集数:',nrow(testOmics),ncol(testOmics)))
+write.xlsx(trainOmics,"C:/Users/txh/Desktop/05data/trainOmics.xlsx",rowNames = FALSE )
+write.xlsx(testOmics,"C:/Users/txh/Desktop/05data/testOmics.xlsx",rowNames = FALSE )
+
+#查看临床数据
+dataClinic<-read.xlsx("C:/Users/txh/Desktop/05data/Clinic.xlsx")
+dataClinic<-as.data.frame(dataClinic)
+print(paste('总样本数:',nrow(dataClinic),ncol(dataClinic)))
+# 缺失数据的识别
+sum(is.na(dataClinic))  # 输出缺失值个数
+colSums(is.na(dataClinic))      #查看每列缺失值数量
+#分割临床数据为train&test数据集
+set.seed(888)
+nn<-0.7
+sub<-sample(1:nrow(dataClinic),round(nrow(dataClinic)*nn))
+trainClicnic<-dataClinic[sub,]#取0.7的数据做训练集
+testClicnic<-dataClinic[-sub,]#取0.3的数据做测试集
+print(paste('训练集数:',nrow(trainClicnic),ncol(trainClicnic)))
+print(paste('验证集数:',nrow(testClicnic),ncol(testClicnic)))
+write.xlsx(trainClicnic,"C:/Users/txh/Desktop/05data/trainClinic.xlsx",rowNames = FALSE )
+write.xlsx(testClicnic,"C:/Users/txh/Desktop/05data/testClinic.xlsx",rowNames = FALSE )
+
+"""合并临床数据
+#训练组合并提取的临床特征和影像组学特征
+trainClinic<-read.xlsx("C:/Users/txh/Desktop/nrrdata/trainClinic.xlsx")
+train_feature$id<-trainOmics$id
+train_feature_part<-train_feature[,c(32,33)]
+Clinic_Omics<-merge(trainClinic,train_feature_part,by="id")   #合并临床特征宇RS分数"""
+
+rm(list=ls())
+#临床数据分析
+Clinic<-read.xlsx("C:/Users/txh/Desktop/05data/Clinic.xlsx")
+#查看数据类型
+str(Clinic)
+#变更数据类型
+Clinic$MCI<-factor(Clinic$MCI,levels=c("是","否"),labels=c("1","0"))
+Clinic$性别<-factor(Clinic$性别,levels=c("是","否"),labels=c("1","0"))
+Clinic$受教育程度<-factor(Clinic$受教育程度,levels=c("小学","初中","中专","高中","大专","本科"),labels=c("1","2","3","4","5","6"))
+Clinic$吸烟<-factor(Clinic$吸烟,levels=c("是","否"),labels=c("1","0"))
+Clinic$饮酒<-factor(Clinic$饮酒,levels=c("是","否"),labels=c("1","0"))
+Clinic$高血压病史<-factor(Clinic$高血压病史,levels=c("是","否"),labels=c("1","0"))
+Clinic$糖尿病史<-factor(Clinic$糖尿病史,levels=c("是","否"),labels=c("1","0"))
+Clinic$冠心病史<-factor(Clinic$冠心病史,levels=c("是","否"),labels=c("1","0"))
+#或者
+Clinic$MCI<-factor(Clinic$MCI)
+Clinic$性别<-factor(Clinic$性别)
+Clinic$受教育程度<-factor(Clinic$受教育程度,levels=c("小学","初中","中专","高中","大专","本科"),labels=c("1","2","3","4","5","6"))
+Clinic$吸烟<-factor(Clinic$吸烟)
+Clinic$饮酒<-factor(Clinic$饮酒)
+Clinic$高血压病史<-factor(Clinic$高血压病史)
+Clinic$糖尿病史<-factor(Clinic$糖尿病史)
+Clinic$冠心病史<-factor(Clinic$冠心病史)
+
+#比较MCI组与对照组之间的临床特征
+#t检验
+library(nortest)
+tapply(Clinic$年龄,Clinic$MCI,lillie.test)    #正态性检验  n>50
+library(car)
+t.test(年龄 ~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(年龄~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$BMI,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(BMI~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(BMI~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$空腹血糖,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(空腹血糖~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(空腹血糖~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$糖化血红蛋白,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(糖化血红蛋白~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(糖化血红蛋白~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$胆固醇,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(胆固醇~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(胆固醇~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$高密度脂蛋白,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(高密度脂蛋白~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(高密度脂蛋白~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$低密度脂蛋白,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(低密度脂蛋白~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(低密度脂蛋白~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$甘油三酯,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(甘油三酯~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(甘油三酯~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$血尿酸,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(血尿酸~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(血尿酸~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$同型半胱氨酸,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(同型半胱氨酸~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(同型半胱氨酸~MCI,data=Clinic,sd)    #计算标准差
+
+tapply(Clinic$血清胱抑素C,Clinic$MCI,lillie.test)    #正态性检验  n>50
+t.test(血清胱抑素C~ MCI, data = Clinic, var.equal = TRUE/FALSE,alternative="two.sided")
+aggregate(血清胱抑素C~MCI,data=Clinic,sd)    #计算标准差
+
+#非参数检验
+aggregate(空腹血糖~MCI,data=Clinic,quantile)    #计算中位数与四分位数
+wilcox.test(空腹血糖~MCI,data=Clinic)     #Mann-White U检验
+
+aggregate(糖化血红蛋白~MCI,data=Clinic,quantile)    
+wilcox.test(糖化血红蛋白~MCI,data=Clinic)     
+
+aggregate(甘油三酯~MCI,data=Clinic,quantile)    
+wilcox.test(甘油三酯~MCI,data=Clinic)    
+
+"""table<-table(Clinic$受教育程度,Clinic$MCI)
+table
+prop.table(table,margin = 2) 
+wilcox.test(受教育程度~MCI,data=Clinic)"""
+
+#分类变量
+table<-table(Clinic$性别,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$受教育程度,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$吸烟,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$饮酒,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$高血压病史,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$糖尿病史,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+table<-table(Clinic$冠心病史,Clinic$MCI)
+table
+prop.table(table,margin = 2)       #生成列百分比
+chisq.test(table,correct=FALSE)
+chisq.test(table)$expected   #生成理论频数
+
+#使用单因素逻辑回归对临床特征进行建模
+model.Clinic<-glm(MCI~性别,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~年龄,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~受教育程度,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~吸烟,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~饮酒,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~高血压病史,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~糖尿病史,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~冠心病史,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~BMI,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~空腹血糖,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~糖化血红蛋白,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~胆固醇,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~高密度脂蛋白,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~低密度脂蛋白,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~甘油三酯,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~血尿酸,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~同型半胱氨酸,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+model.Clinic<-glm(MCI~血清胱抑素C,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+#将单因素logistic回归结果中有意义的结果纳入到多因素logistic回归中
+model.Clinic<-glm(MCI~年龄+同型半胱氨酸,data = Clinic,family=binomial(link='logit'))
+summary(model.Clinic)
+coef<-coef(model.Clinic)       #系数
+coef_CI<-confint(model.Clinic)   #系数95%范围
+OR_Results<-exp(cbind("OR"=coef,"LL"=coef_CI[,1],"UL"=coef_CI[,2]))     #转变为OR
+round(OR_Results,3)
+
+
+rm(list=ls())
+#对单纯影像组学进行建模
+library(mRMRe)
+trainOmics<-read.xlsx("C:/Users/txh/Desktop/05data/trainOmics.xlsx")
+dim(trainOmics)
+trainOmics$label1<-factor(trainOmics$label1,levels=c("N","C"),labels=c("0","1"))
+mrmr_feature<-trainOmics[,4:1877]
+mrmr_feature$y <-as.numeric(as.character(trainOmics$label1))      #y为因变量
+#转化成mRMR.data的形式才能被使用
+Data <- mRMR.data(data = data.frame(mrmr_feature))  
+target_indices <- which(names(mrmr_feature)=='y')  
+mrmr<-mRMR.ensemble(data = Data, target_indices = c(target_indices),
+                     feature_count = 10, solution_count = 1)
+index<-mrmr@filters[[as.character(mrmr@target_indices)]]
+#获取训练集特征
+train_feature <- mrmr_feature[,index]
+train_feature$outcome <-mrmr_feature$y   #mrmr_feature$y
+
+#再用lasso回归进一步筛选特征
+mdata_train<-train_feature
+dim(mdata_train)
+y <- factor(mdata_train$outcome)  
+#除去因变量，提取自变量
+yavars<-names(mdata_train) %in% c("outcome")
+X <- as.data.frame(mdata_train[!yavars])
+X <- model.matrix(~.,data=X)[,-1]      #[,-1]是为了去掉截距
+#Lasso回归
+fit <- glmnet(X,y,alpha=1, family = "binomial")     #nlambda=100  可以选择lambda数量
+plot(fit, xvar="lambda", label=TRUE)    #LASSO系数路径图"""
+cv.fit <- cv.glmnet(X,y,alpha=1,nfolds = 10,family="binomial")
+plot(cv.fit)     #LASSO正则化路径图（确定特征数量）
+abline(v=log(c(cv.fit$lambda.min, cv.fit$lambda.1se)), lty=2)
+plot(cv.fit$glmnet.fit,xvar="lambda")
+abline(v=log(cv.fit$lambda.min), lty=2) #把lambda取最小值时对应的虚线绘制到LASSO图中
+best_model <- glmnet(X, y, alpha = 1,  family = "binomial",lambda = cv.fit$lambda.min,intercept = FALSE)
+coef(best_model)
+#计算Radiomics Score
+mdata_train$RS <-predict(best_model,type="link",newx=X,newy=y)
+mdata_train$RS<-as.numeric(mdata_train$RS)
+mdata_train$patient_id<-trainOmics$patient_id    #赋予mdata_data数据集id
+write.xlsx(mdata_train,"C:/Users/txh/Desktop/05data/train_feature10.xlsx",rowNames = FALSE )
+
+#查看在训练集的情况
+library(caret)
+mdata_train$outcome<-factor(mdata_train$outcome)
+model.Omics <- glm(outcome ~ RS,data=mdata_train,binomial(link='logit'))
+probTrainOmics<-predict.glm(object =model.Omics,newdata=mdata_train,type = "response")
+predTrainOmics<-ifelse(probTrainOmics>=0.5,1,0)
+xtab <- table(predTrainOmics, mdata_train$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab)
+rocTrainOmics <- roc(mdata_train$outcome, probTrainOmics,levels=c("1","0"),ci=T,auc=T) 
+plot(rocTrainOmics,
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.4, print.auc.y=0.4, # 设置AUC值坐标为（x，y）
+     col="green",    # 设置ROC曲线颜色
+     lty=1)
+# 查看在验证集的情况
+testOmics<-read.xlsx("C:/Users/txh/Desktop/05data/testOmics.xlsx")
+testOmics$outcome<-factor(testOmics$label1,levels=c("N","C"),labels=c("0","1"))
+testOmicsNew<-testOmics[,c(names(mdata_train))[1:11]]   #生成与mdata_train数据相同列变量
+View(testOmicsNew)
+yavars<-names(testOmicsNew) %in% c("outcome")
+X <- as.data.frame(testOmicsNew[!yavars])
+X <- model.matrix(~.,data=X)[,-1] 
+y <- testOmicsNew$outcome
+testOmicsNew$RS<-predict(best_model,type="link",newx=X,newy=y)       #生成测试集中的RS
+testOmicsNew$RS<-as.numeric(testOmicsNew$RS)
+testOmicsNew$patient_id<-testOmics$patient_id 
+write.xlsx(testOmicsNew,"C:/Users/txh/Desktop/05data/test_feature10.xlsx",rowNames = FALSE )
+probOmicsTest<-predict.glm(object =model.Omics,newdata=testOmicsNew,type = "response")
+predOmicsTest<-ifelse(probOmicsTest>=0.5,1,0)
+xtab <- table(predOmicsTest, testOmicsNew$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab)
+rocTestOmics <- roc(testOmicsNew$outcome, probOmicsTest,levels=c("1","0"),ci=T,auc=T) 
+
+#经过lasso回归筛选抽出的各个特征
+#如果lambda取均方误差最小时时,获取筛选后的特征
+Coefficients <- coef(best_model)
+Active.Index <- which(Coefficients != 0)
+Active.Coefficients <- Coefficients[Active.Index]
+Active.Index
+Active.Coefficients
+row.names(Coefficients)[Active.Index]
+Features<-as.character(row.names(Coefficients)[Active.Index])  #与下一行位置不能变
+Coefficients<-Active.Coefficients
+
+#画横向柱状图
+data <- data.frame(  
+    Category = c('auto__lbp-3D-k_gldm_DependenceVariance','auto__lbp-3D-k_firstorder_10Percentile',
+    'auto__wavelet-LHL_firstorder_Minimum','auto__lbp-3D-m1_firstorder_RootMeanSquared','auto__logarithm_glszm_HighGrayLevelZoneEmphasis','auto__lbp-2D_glszm_SizeZoneNonUniformityNormalized',
+    'auto__wavelet-HLL_gldm_DependenceNonUniformityNormalized','auto__log-sigma-3-0-mm-3D_firstorder_Minimum','auto__wavelet-HHH_glcm_Autocorrelation'),  
+    Value = c(0.1690871,-10.1259353,-0.6516632,-2.2893315,3.4843306,-1.4464948,-288.6881753,-0.1938099,10.7509479))
+#绘制Coefficients-Features Plot
+bar<-barplot(data$Value,horiz = TRUE,xlab="Coefficients",ylab="Features",col="LightSkyBlue",names=FALSE,xlim = c(-11,11))
+text(x=-0,y=bar,data$Category,pos=4) #显示交叉个数
+text(x=0,y=bar,data$Value,pos=2)
+
+
+#临床变量合并影像组学（RS值）
+dataClinic<-read.xlsx("C:/Users/txh/Desktop/05data/Clinic.xlsx")
+dataClinic<-as.data.frame(dataClinic)
+print(paste('总样本数:',nrow(dataClinic),ncol(dataClinic)))
+#分割临床数据为train&test数据集
+set.seed(888)
+nn<-0.7
+sub<-sample(1:nrow(dataClinic),round(nrow(dataClinic)*nn))
+trainClicnic<-dataClinic[sub,]#取0.7的数据做训练集
+testClicnic<-dataClinic[-sub,]#取0.3的数据做测试集
+print(paste('训练集数:',nrow(trainClicnic),ncol(trainClicnic)))
+print(paste('验证集数:',nrow(testClicnic),ncol(testClicnic)))
+write.xlsx(trainClicnic,"C:/Users/txh/Desktop/05data/trainClinic.xlsx",rowNames = FALSE )
+write.xlsx(testClicnic,"C:/Users/txh/Desktop/05data/testClinic.xlsx",rowNames = FALSE )
+#合并训练集
+trainClinic<-read.xlsx("C:/Users/txh/Desktop/05data/trainClinic.xlsx")
+trainOmics<-read.xlsx("C:/Users/txh/Desktop/05data/train_feature10.xlsx")
+trainOmics_part<-trainOmics[,c(11,12,13)]
+trainOmics_part$patient_id<-as.numeric(trainOmics_part$patient_id)
+trainClinicOmics<-merge(trainClinic,trainOmics_part,by="patient_id")   #合并临床特征宇RS分数
+write.xlsx(trainClinicOmics,"C:/Users/txh/Desktop/05data/trainClinicOmics.xlsx",rowNames = FALSE )
+#合并验证集
+testClinic<-read.xlsx("C:/Users/txh/Desktop/05data/testClinic.xlsx")
+testOmics<-read.xlsx("C:/Users/txh/Desktop/05data/test_feature10.xlsx")
+testOmics_part<-testOmics[,c(11,12,13)]
+testOmics_part$patient_id<-as.numeric(testOmics_part$patient_id)
+testClinicOmics<-merge(testClinic,testOmics_part,by="patient_id")   #合并临床特征宇RS分数
+write.xlsx(testClinicOmics,"C:/Users/txh/Desktop/05data/testClinicOmics.xlsx",rowNames = FALSE )
+
+
+#机器学习分析
+library(randomForest) 
+library(e1071) 
+library(caret)
+#LR分析
+#组学模型
+trainClinicOmics<-read.xlsx("C:/Users/txh/Desktop/05data/trainClinicOmics.xlsx")
+trainClinicOmics$outcome<-factor(trainClinicOmics$outcome)
+modelTrainOmicsLR <- glm(outcome~RS,data=trainClinicOmics,family = binomial(link="logit"))
+summary(modelTrainOmicsLR)
+#查看模型在训练集的验证
+probLRTrainOmics<-predict(object =modelTrainOmicsLR,newdata=trainClinicOmics,type="response")   #预测分类
+pred <- ifelse(probLRTrainOmics>=0.5,1,0)       #预测值
+xtab <- table(pred, trainClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTrainOmicsLR <- roc(trainClinicOmics$outcome, probLRTrainOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTrainOmicsLR
+#查看模型在验证集的验证
+testClinicOmics<-read.xlsx("C:/Users/txh/Desktop/05data/testClinicOmics.xlsx")
+testClinicOmics$outcome<-factor(testClinicOmics$outcome)
+probLRTestOmics<-predict(object =modelTrainOmicsLR,newdata=testClinicOmics,type="response")   #预测分类
+pred <- ifelse(probLRTestOmics>=0.5,1,0)       #预测值
+xtab <- table(pred, testClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTestOmicsLR <- roc(testClinicOmics$outcome, probLRTestOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTestOmicsLR
+
+#联合模型
+modelTrainClinicOmicsLR <- glm(outcome~RS+年龄+同型半胱氨酸,data=trainClinicOmics,family = binomial(link="logit"))
+summary(modelTrainClinicOmicsLR)
+#查看模型在训练集的验证
+probLRTrainClinicOmics<-predict(object =modelTrainClinicOmicsLR,newdata=trainClinicOmics,type="response")   #预测分类
+pred <- ifelse(probLRTrainClinicOmics>=0.5,1,0)       #预测值
+xtab <- table(pred, trainClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTrainClinicOmicsLR <- roc(trainClinicOmics$outcome, probLRTrainClinicOmics,levels=c("1","0"),ci=T,auc=T)
+rocTrainClinicOmicsLR 
+#查看模型在验证集的验证
+probLRTestClinicOmics<-predict(object =modelTrainClinicOmicsLR,newdata=testClinicOmics,type="response")   #预测分类
+pred <- ifelse(probLRTestClinicOmics>=0.5,1,0)       #预测值
+xtab <- table(pred, testClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTestClinicOmicsLR <- roc(testClinicOmics$outcome, probLRTestClinicOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTestClinicOmicsLR
+
+
+#RF分析
+#临床模型
+set.seed(888)
+#组学模型
+modelTrainOmicsRF <- randomForest(outcome~RS,data=trainClinicOmics,ntree = 5,importance=TRUE)
+summary(modelTrainOmicsRF)
+#查看模型在训练集的验证
+pred<-predict(object =modelTrainOmicsRF,newdata=trainClinicOmics)   #预测分类
+probRFTrainOmics <- predict(modelTrainOmicsRF, newdata = trainClinicOmics, type = "prob")[,2]       #预测值
+xtab <- table(pred, trainClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTrainOmicsRF <- roc(trainClinicOmics$outcome, probRFTrainOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTrainOmicsRF
+#查看模型在验证集的验证
+pred<-predict(object =modelTrainOmicsRF,newdata=testClinicOmics)   #预测分类
+probRFTestOmics <- predict(modelTrainOmicsRF, newdata = testClinicOmics, type = "prob")[,2]       #预测值
+xtab <- table(pred, testClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTestOmicsRF <- roc(testClinicOmics$outcome, probRFTestOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTestOmicsRF
+
+#联合模型
+set.seed(8883)
+modelTraiClinicnOmicsRF <- randomForest(outcome~RS+年龄+同型半胱氨酸,data=trainClinicOmics,ntree = 5,importance=TRUE)
+summary(modelTraiClinicnOmicsRF)
+#查看模型在训练集的验证
+pred<-predict(object =modelTraiClinicnOmicsRF,newdata=trainClinicOmics)   #预测分类
+probRFTrainClinicOmics <- predict(modelTraiClinicnOmicsRF, newdata = trainClinicOmics, type = "prob")[,2]       #预测值
+xtab <- table(pred, trainClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTrainClinicOmicsRF <- roc(trainClinicOmics$outcome, probRFTrainClinicOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTrainClinicOmicsRF
+#查看模型在验证集的验证
+pred<-predict(object =modelTraiClinicnOmicsRF,newdata=testClinicOmics)   #预测分类
+probRFTestClinicOmics <- predict(modelTraiClinicnOmicsRF, newdata = testClinicOmics, type = "prob")[,2]       #预测值
+xtab <- table(pred, testClinicOmics$outcome)   #两个变量必须为分类变量
+confusionMatrix(xtab,mode = "everything",positive="1")
+rocTestClinicOmicsRF <- roc(testClinicOmics$outcome, probRFTestClinicOmics,levels=c("1","0"),ci=T,auc=T) 
+rocTestClinicOmicsRF
+
+
+#SVC分析
+#svc分析数据处理 
+X_trainOmi <- trainClinicOmics[,c(23)]
+X_trainAll <- trainClinicOmics[,c(5,20,23)]
+Y_train<-factor(trainClinicOmics[,c(22)],levels=c("0","1"),labels=c("0","1"))
+
+X_testOmi <- testClinicOmics[,c(23)]
+X_testAll <- testClinicOmics[,c(5,20,23)]
+Y_test<-factor(testClinicOmics[,c(22)],levels=c("0","1"),labels=c("0","1"))
+#组学模型
+modelTrainOmicsSVC <- svm(x = X_trainOmi, y = Y_train,kernel = 'sigmoid', C = 1.0 ,probability = TRUE)
+#在测试集上使用最佳参数配置进行预测
+pred <- predict(modelTrainOmicsSVC, newdata = X_trainOmi, probability = TRUE, decision.values = TRUE)
+xtab <- table(pred, Y_train)  
+confusionMatrix(xtab,mode = "everything",positive="1")
+probSVCTrainOmics <- attr(pred, "probabilities")#提取出模型预测的测试集的概率
+rocTrainOmicsSVC <- roc(Y_train, probSVCTrainOmics[,2],levels=c("1","0"),ci=T,auc=T)
+rocTrainOmicsSVC 
+#在测试集上使用最佳参数配置进行预测
+pred <- predict(modelTrainOmicsSVC, newdata = X_testOmi, probability = TRUE, decision.values = TRUE)
+xtab <- table(pred, Y_test)  
+confusionMatrix(xtab,mode = "everything",positive="1")
+probSVCTestOmics <- attr(pred, "probabilities")#提取出模型预测的测试集的概率
+rocTestOmicsSVC <- roc(Y_test, probSVCTestOmics[,2],levels=c("1","0"),ci=T,auc=T) 
+rocTestOmicsSVC
+
+#联合模型
+modelTrainClinicOmicsSVC <- svm(x = X_trainAll, y = Y_train,kernel = 'sigmoid', C = 1.0 ,probability = TRUE)
+#在测试集上使用最佳参数配置进行预测
+pred <- predict(modelTrainClinicOmicsSVC, newdata = X_trainAll, probability = TRUE, decision.values = TRUE)
+xtab <- table(pred, Y_train)  
+confusionMatrix(xtab,mode = "everything",positive="1")
+probSVCTrainClinicOmics <- attr(pred, "probabilities")#提取出模型预测的测试集的概率
+rocTrainClinicOmicsSVC <- roc(Y_train, probSVCTrainClinicOmics[,2],levels=c("1","0"),ci=T,auc=T)
+rocTrainClinicOmicsSVC 
+#在测试集上使用最佳参数配置进行预测
+pred <- predict(modelTrainClinicOmicsSVC, newdata = X_testAll, probability = TRUE, decision.values = TRUE)
+xtab <- table(pred, Y_test)  
+confusionMatrix(xtab,mode = "everything",positive="1")
+probSVCTestClinicOmics <- attr(pred, "probabilities")#提取出模型预测的测试集的概率
+rocTestClinicOmicsSVC <- roc(Y_test, probSVCTestClinicOmics[,2],levels=c("1","0"),ci=T,auc=T) 
+rocTestClinicOmicsSVC
+
+#roc曲线绘制
+###组学模型
+#绘制训练集中不同模型的ROC曲线图
+plot(rocTrainOmicsLR, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.4, # 设置AUC值坐标为（x，y）
+     main="Radiomics Receiver Operating Characteristic Train",  # 添加图形标题
+     col="red",  
+     lty=1,
+     legacy.axes=TRUE)   
+# 再添加1条ROC曲线
+plot(rocTrainOmicsRF, 
+     print.auc=TRUE, 
+     print.auc.x=0.5, print.auc.y=0.35, 
+     add=TRUE,
+     col="orange",   
+     lty=1) 
+plot(rocTrainOmicsSVC, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.3, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="green",    # 设置ROC曲线颜色
+     lty=1) 
+# 添加图例
+legend("bottomright",  # 图例位置x，y
+       bty = "n",   # 图例样式
+       legend=c("LR model","RF model","SVM model"),  # 添加分组
+       col=c("red","orange","green"),  # 颜色跟前面一致
+       lwd=1,
+       lty=1)  # 线条粗细   输出700*580
+
+#绘制验证集中不同模型的ROC曲线图
+plot(rocTestOmicsLR, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.4, # 设置AUC值坐标为（x，y）
+     main="Radiomics Receiver Operating Characteristic Test",  # 添加图形标题
+     col="red",  
+     lty=1,
+     legacy.axes=TRUE)   
+# 再添加1条ROC曲线
+plot(rocTestOmicsRF, 
+     print.auc=TRUE, 
+     print.auc.x=0.5, print.auc.y=0.35, 
+     add=TRUE,
+     col="orange",   
+     lty=1) 
+plot(rocTestOmicsSVC, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.3, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="green",    # 设置ROC曲线颜色
+     lty=1) 
+# 添加图例
+legend("bottomright",  # 图例位置x，y
+       bty = "n",   # 图例样式
+       legend=c("LR model","RF model","SVM model"),  # 添加分组
+       col=c("red","orange","green"),  # 颜色跟前面一致
+       lwd=1,
+       lty=1)  # 线条粗细   输出700*580
+
+#联合模型
+#绘制测试集的ROC曲线图
+plot(rocTrainClinicOmicsLR, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.4, # 设置AUC值坐标为（x，y）
+     main="Conjoint Receiver Operating Characteristic Train",  # 添加图形标题
+     col="red",    # 设置ROC曲线颜色
+     lty=1,
+     legacy.axes=TRUE)   
+# 再添加1条ROC曲线
+plot(rocTrainClinicOmicsRF, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.35, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="orange",    # 设置ROC曲线颜色
+     lty=1) 
+plot(rocTrainClinicOmicsSVC, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.30, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="green",    # 设置ROC曲线颜色
+     lty=1) 
+
+# 添加图例
+legend("bottomright",  # 图例位置x，y
+       bty = "n",  
+       legend=c("LR model","RF model","SVM model"),  
+       col=c("red","orange","green"),  
+       lwd=1,
+       lty=1)  # 线条粗细   输出700*580
+
+#绘制验证集的ROC曲线图
+plot(rocTestClinicOmicsLR, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.4, # 设置AUC值坐标为（x，y）
+     main="Conjoint Receiver Operating Characteristic Test",  # 添加图形标题
+     col="red",    # 设置ROC曲线颜色
+     lty=1,
+     legacy.axes=TRUE)   
+# 再添加1条ROC曲线
+plot(rocTestClinicOmicsRF, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.35, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="orange",    # 设置ROC曲线颜色
+     lty=1) 
+plot(rocTestClinicOmicsSVC, 
+     print.auc=TRUE, # 图像上输出AUC的值
+     print.auc.x=0.5, print.auc.y=0.30, # 设置AUC值坐标为（x，y）
+     add=TRUE,
+     col="green",    # 设置ROC曲线颜色
+     lty=1) 
+
+# 添加图例
+legend("bottomright",  # 图例位置x，y
+       bty = "n",  
+       legend=c("LR model","RF model","SVM model"),  
+       col=c("red","orange","green"),  
+       lwd=1,
+       lty=1)  # 线条粗细   输出700*580
